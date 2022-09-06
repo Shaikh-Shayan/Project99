@@ -51,16 +51,16 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable, EIP712{
         redeemed[voucher.buyer][voucher.tokenId] = true;
     }
 
-    function mint(address account, uint256 id)
-        public
-        payable
-    {   
-        require(id==1, "Token doesn't exists");
-        require(minted+1 <= MAX_SUPPLY, "Not enough supply");
-        require(msg.value >= 1 ether, "Not enough amount sent to buy NFT");
-        _mint(account, id, 1, "");
-        minted += 1;
-    }
+    //function mint(address account, uint256 id)
+    //  public
+    //   payable
+    //{   
+    //    require(id==1, "Token doesn't exists");
+    //    require(minted+1 <= MAX_SUPPLY, "Not enough supply");
+    //    require(msg.value >= 1 ether, "Not enough amount sent to buy NFT");
+    //    _mint(account, id, 1, "");
+    //    minted += 1;
+    //}
     
     function burn(uint256 tokenId)
         external 
