@@ -69,15 +69,7 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable, EIP712, Acce
 
         emit Reedemed(voucher.buyer, voucher.tokenId);
     }
-
-    //burns the nft
-    function burn(uint256 tokenId)
-        external 
-    {
-        require(balanceOf(msg.sender, tokenId) > 1, "You do not own any NFT!");
-        _burn(msg.sender, tokenId, 1);
-    }
-
+    
     //let's the owner withdraw funds from the contract
     function withdraw() public onlyOwner{
         require(address(this).balance >0, "Balance is 0");
