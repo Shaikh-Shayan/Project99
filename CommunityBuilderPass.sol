@@ -55,7 +55,7 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable, EIP712, Acce
 
         //Check to see if user has already used the signature
         require(!signatureUsed[voucher.signature], "Signature has already been used.");
-        
+
         //This contract represents only 1 single NFT hence only tokenId 1 is possible
         require(voucher.tokenId == 1 , "Token doesn't exist");
         
@@ -70,7 +70,6 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable, EIP712, Acce
         emit Reedemed(voucher.buyer, voucher.tokenId);
     }
 
-
     //burns the nft
     function burn(uint256 tokenId)
         external 
@@ -78,15 +77,14 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable, EIP712, Acce
         require(balanceOf(msg.sender, tokenId) > 1, "You do not own any NFT!");
         _burn(msg.sender, tokenId, 1);
     }
-    
-    //let's the owner withdraw the funds from the contract
+
+    //let's the owner withdraw funds from the contract
     function withdraw() public onlyOwner{
         require(address(this).balance >0, "Balance is 0");
         payable(owner()).transfer(address(this).balance);
     }
 
-
-    //makes NFT non-transferable 
+    //makes NFT non-transferrable
     function _beforeTokenTransfer(address operator, address from, address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
         internal 
         override 
@@ -95,8 +93,7 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable, EIP712, Acce
         require(from == address(0) || to == address(0), "You can't transfer this NFT");
     }
 
-
-    //emits the event based on whether token is minted or burned.
+    //emits the event base on whether token is minted or burned.
     function _afterTokenTransfer(address operator, address from, address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
         internal 
         override 
@@ -107,15 +104,14 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable, EIP712, Acce
         }else if(to == address(0)){
             emit Revoke(to, ids[0]);
         }
+
     }
     
-
     //verifies signature against input and recovers address, or reverts transaction if signature is invalid
     function _verify(NFTVoucher calldata voucher) internal view returns (address) {
         bytes32 digest = _hash(voucher);
         return ECDSA.recover(digest, voucher.signature);
     }
-
 
     //returns the hash of the argument passed
     function _hash(NFTVoucher calldata voucher) internal view returns (bytes32) {
@@ -128,10 +124,8 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable, EIP712, Acce
         )));
     }
 
-
     //override required by solidity
     function supportsInterface(bytes4 interfaceId) public view virtual override(ERC1155, AccessControl) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
-
 }
