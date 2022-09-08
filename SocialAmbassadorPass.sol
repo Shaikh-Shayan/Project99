@@ -33,8 +33,7 @@ contract SocialAmbassadorPass is ERC1155, Ownable{
 
     //mints the NFT to the account
     function mint(address account, uint256 id)
-        public
-        onlyOwner
+        internal
     {   
         //This contract represents only 1 single NFT hence only tokenId 1 is possible
         require(id==1, "Token doesn't exists");
@@ -94,7 +93,7 @@ contract SocialAmbassadorPass is ERC1155, Ownable{
 
         claimed[msg.sender] = true;
 
-        _mint(msg.sender, 1, 1, "");
+        mint(msg.sender, 1);
         
         emit Claimed(msg.sender, 1);
     }
