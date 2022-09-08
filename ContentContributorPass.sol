@@ -57,7 +57,7 @@ contract ContentContributorPass is ERC1155, Ownable, ERC1155Burnable{
         for(uint i = 0; i < accounts.length; i++) {
         
             //Skip the address if it's not present in the allowlist or if it has been airdropped nft already
-            if(allowlist[accounts[i]] != true || airdropped[accounts[i]] != false ){
+            if(allowlist[accounts[i]] == false || airdropped[accounts[i]] == true ){
                 continue;
             }
             airdropped[accounts[i]] = true;
