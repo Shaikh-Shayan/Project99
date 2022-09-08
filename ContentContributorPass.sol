@@ -3,9 +3,8 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts@4.7.3/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts@4.7.3/access/Ownable.sol";
-import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155Burnable.sol";
 
-contract ContentContributorPass is ERC1155, Ownable, ERC1155Burnable{
+contract ContentContributorPass is ERC1155, Ownable{
     event Airdropped(address account, uint256 tokenId);
     event Claimed(address account, uint256 tokenId);
     event RemovedFromAllowlist(address account);
