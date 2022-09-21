@@ -7,15 +7,14 @@ import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155Burnable.s
 
 contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable{
 
-    event Attest(address indexed to, uint256 indexed tokenId);
-    event Revoke(address indexed to, uint256 indexed tokenId);
-
     event Airdropped(address account, uint256 tokenId);
+    event NotAirdropped(address account, uint256 tokenId);
     event Claimed(address account, uint256 tokenId);
-
+    event NFTMinted(address account, uint256 tokenId);
+    event NFTBurned(address account, uint256 tokenId);
     event RemovedFromAllowlist(address account, uint256 tokenId);
     event AddedToAllowlist(address account, uint256 tokenId);
-    event NotAirdropped(address account, uint256 tokenId);
+    
 
     mapping(uint256 => uint256) MAX_SUPPLY;
     mapping(uint256 => uint256) minted;
@@ -42,26 +41,15 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable{
         }
     }
 
-    //mints the NFT to the account
-    function mint(address account, uint256 id)
-        internal
-    {   
-        //This contract represents only 2 NFT hence only tokenId 1 and 2 are possible
-        require(id==1 || id == 2, "Token doesn't exists");
-
-        //check if number of minted nft exceeds Maximum Supply
-        require(minted[id]+1 <= MAX_SUPPLY[id], "Not enough supply");
-
-        _mint(account, id, 1, "");
-        minted[id] += 1;
-    }
-
     //airdrops nfts to all the accounts passed as paramater to the function
     function airdrop(uint256 tokenId, address[] memory accounts) 
         external
         onlyOwner 
     {
         require(tokenId == 1 || tokenId == 2, "TokenId doesn't exists!");
+
+        //check if number of airdropped nft exceeds Maximum Supply
+        require(minted[tokenId]+accounts.length <= MAX_SUPPLY[tokenId], "Not enough supply");
 
         for(uint i = 0; i < accounts.length; i++) {
             //Skip the address if it's not present in the allowlist or if it has been airdropped nft already
@@ -99,17 +87,18 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable{
     }
 
     //mints the nft to the address(msg.sender) who was aidropped the nft 
-    function claim(uint256 tokenId) external {
+    function claim(address account, uint256 tokenId) external {
 
         require(tokenId == 1 || tokenId == 2, "TokenId doesn't exists!");
-        require(airdropped[tokenId][msg.sender] == true, "You don't have any NFT!");
-        require(claimed[tokenId][msg.sender] == false, "NFT Already Claimed!");
+        require(airdropped[tokenId][account] == true, "You don't have any NFT!");
+        require(claimed[tokenId][account] == false, "NFT Already Claimed!");
 
-        claimed[tokenId][msg.sender] = true;
+        claimed[tokenId][account] = true;
 
-        mint(msg.sender, tokenId);
+        _mint(account, tokenId, 1, "");
+        minted[tokenId] += 1;
         
-        emit Claimed(msg.sender, tokenId);
+        emit Claimed(account, tokenId);
     }
 
     //sets the base URI
@@ -155,9 +144,9 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable{
         virtual 
     {
         if(from == address(0)){
-            emit Attest(to, ids[0]);
+            emit NFTMinted(to, ids[0]);
         }else if(to == address(0)){
-            emit Revoke(to, ids[0]);
+            emit NFTBurned(to, ids[0]);
         }
 
     }
