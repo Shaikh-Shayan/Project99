@@ -4,142 +4,163 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts@4.7.3/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts@4.7.3/access/Ownable.sol";
 import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155Burnable.sol";
+import "@openzeppelin/contracts@4.7.3/utils/cryptography/draft-EIP712.sol";
+import "@openzeppelin/contracts@4.7.3/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts@4.7.3/access/AccessControl.sol";
 
 //["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB"]
-contract ContentContributorPass is ERC1155, Ownable, ERC1155Burnable{
-    event Attest(address indexed to, uint256 indexed tokenId);
-    event Revoke(address indexed to, uint256 indexed tokenId);
-
+contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, AccessControl {
+    event Redeemed(address buyer, uint256 tokenId);
     event Airdropped(address account, uint256 tokenId);
-    event Claimed(address account, uint256 tokenId);
-    event RemovedFromAllowlist(address account);
-    event AddedToAllowlist(address account);
+    event MemberPassClaimed(address account, uint256 tokenId);
     event NotAirdropped(address account);
+    event Withdrawn(uint256 amount);
+    event NFTBurned(address account, uint256 tokenId);
 
-    uint256 immutable MAX_SUPPLY;
-    uint256 minted = 0;
+    string private constant SIGNING_DOMAIN = "Voucher-Domain";
+    string private constant SIGNING_VERSION = "1";
+    mapping(uint256 => uint256) MAX_SUPPLY;
+    mapping(uint256 => uint256) minted;
     uint256 creationTime;
     uint256 burnTime;
 
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+
+    //NFT Voucher contains all the information that will go in the actual NFT
+    struct NFTVoucher {
+        uint256 tokenId;
+        uint256 minPrice;
+        address buyer;
+        //The signature proves that the NFT creator authorized the creation of the specific NFT described in the voucher.
+        bytes signature;
+    }
+
+    //Signature Tracker
+    mapping(uint256 => mapping(bytes => bool)) public signatureUsed;
+    
     mapping(address => bool) public claimed;
-    mapping(address => bool) public allowlist;
     mapping(address => bool) public airdropped;
-
-    constructor(uint256 maxSupply, address[] memory _whitelist) ERC1155("MemberPass") {
-        require(_whitelist.length > 0, "Empty allowlist provided");
+    
+    constructor(address signer, uint256 longhorn_maxsupply, uint256 memberpass_maxsupply) ERC1155("LongHorn_MemberPass") EIP712(SIGNING_DOMAIN, SIGNING_VERSION) {
+        _setupRole(MINTER_ROLE, signer);
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         creationTime = block.timestamp;
-        //1(year) * 365(days) * 24(hours) * 60(min) * 60(sec) = 31536000 seconds
+        //365(days)*24(hours)*60(minutes)*60(seconds) = 31536000 seconds
         burnTime = creationTime + 31536000;
-        MAX_SUPPLY = maxSupply;
-
-        for(uint i=0; i< _whitelist.length; i++){
-            allowlist[_whitelist[i]] = true;
-        }
+        MAX_SUPPLY[1] = longhorn_maxsupply;
+        MAX_SUPPLY[2] = memberpass_maxsupply;
     }
 
     //sets the base URI
-    function setURI(string memory newuri) public onlyOwner {
+    function setURI(string memory newuri) public onlyOwner{
         _setURI(newuri);
     }
 
-    //mints the nft to the account
-    function mint(address account, uint256 id)
-        internal
+    //takes a voucher as an argument and let's the user redeem the signed voucher
+    function redeem(NFTVoucher calldata voucher)
+        public
+        payable
     {   
-        //This contract represents only 1 single NFT hence only tokenId 1 is possible
-        require(id==1, "Token doesn't exists");
+        
+        //Check if the signature is valid and belongs to the account that's authorized to mint NFTs
+        address signer = _verify(voucher);
+        require(hasRole(MINTER_ROLE, signer), "Invalid signer");
 
-        //check if number of minted nft exceeds Maximum Supply
-        require(minted+1 <= MAX_SUPPLY, "Not enough supply");
+        //Check to see if user has already used the signature
+        require(!signatureUsed[voucher.tokenId][voucher.signature], "Signature has already been used.");
 
-        _mint(account, id, 1, "");
-        minted += 1;
+        require(voucher.tokenId == 1 || voucher.tokenId == 2, "Token doesn't exist");
+        require(minted[voucher.tokenId]<MAX_SUPPLY[voucher.tokenId], "Not enough supply");
+        require(msg.value >= voucher.minPrice , "Not enough ethers sent");
+
+        _mint(voucher.buyer, voucher.tokenId, 1, "");
+    
+        minted[voucher.tokenId] += 1;
+        signatureUsed[voucher.tokenId][voucher.signature] = true;
+
+        emit Redeemed(voucher.buyer, voucher.tokenId);
     }
 
+
     //airdrops nfts to all the accounts passed as paramater to the function
-    function airdrop(uint256 tokenId, address[] memory accounts) 
+    function airdrop(address[] memory accounts) 
         external
         onlyOwner 
-    {
-        require(tokenId == 1, "TokenId doesn't exists!");
+    {   
+        //check if number of airdropped Member Pass Nft exceeds Maximum Supply
+        require(minted[2]+accounts.length<= MAX_SUPPLY[2], "Not enough supply");
 
         for(uint i = 0; i < accounts.length; i++) {
-            //Skip the address if it's not present in the allowlist or if it has been airdropped nft already
-            if(allowlist[accounts[i]] == false || airdropped[accounts[i]] == true ){
+            //Skip the address if it doesn't own any Long Horn NFT or if it has been airdropped nft already
+            if(balanceOf(accounts[i], 1) < 1 || airdropped[accounts[i]] == true){
                 emit NotAirdropped(accounts[i]);
                 continue;
             }
+
             airdropped[accounts[i]] = true;
-            emit Airdropped(accounts[i], tokenId);
+            emit Airdropped(accounts[i], 1);
         }
     }
 
-    //adds the list of addresses to the Allowlist
-    function addToAllowlist(address[] memory _recipients) 
-        external
-        onlyOwner 
-    {
-        for(uint i = 0; i < _recipients.length; i++) {
-            allowlist[_recipients[i]] = true;
-            emit AddedToAllowlist(_recipients[i]);
-        }
-    }
-
-    //removes the list of addresses from the allowlist
-    function removeFromAllowlist(address[] memory _recipients) 
-        external 
-        onlyOwner
-    {
-        for(uint i = 0; i < _recipients.length; i++) {
-            allowlist[_recipients[i]] = false;
-            emit RemovedFromAllowlist(_recipients[i]);
-        }
-    }
 
     //mints the nft to the address(msg.sender) who was aidropped the nft 
-    function claim() external {
-        require(airdropped[msg.sender] == true, "You don't have any NFT!");
-        require(claimed[msg.sender] == false, "NFT Already Claimed!");
+    function claim(address account) external {
+        require(airdropped[account] == true, "You don't have any NFT!");
+        require(claimed[account] == false, "NFT Already Claimed!");
 
-        claimed[msg.sender] = true;
+        claimed[account] = true;
 
-        mint(msg.sender, 1);
+        _mint(account, 2, 1, "");
         
-        emit Claimed(msg.sender, 1);
+        emit MemberPassClaimed(account, 2);
     }
 
-    function burn( address account, uint256 id, uint256 value) 
-        public 
-        override 
-    {
-        require(account == _msgSender() || isApprovedForAll(account, _msgSender()),
+    //burns the nft only after 1 year
+    function burn(
+        address account,
+        uint256 id,
+        uint256 value
+    ) public override {
+        require(
+            account == _msgSender() || isApprovedForAll(account, _msgSender()),
             "ERC1155: caller is not token owner or approved"
         );
-
+        //burn rate:- 1 year
         require(block.timestamp > burnTime, "You are not allowed to burn the nft before 1 year");
+
+        emit NFTBurned(account, id);
         super.burn(account, id, value);
     }
 
-    //ensures that NFT is non-transferable 
-    function _beforeTokenTransfer(address operator, address from, address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
-        internal 
-        override 
-        virtual 
-    {
-        require(from == address(0) || to == address(0), "You can't transfer this NFT");
+
+    //let's the owner withdraw the funds from the contract
+    function withdraw() public onlyOwner{
+        uint256 amount = address(this).balance;
+        require(amount >0, "Balance is 0");
+        
+        payable(owner()).transfer(amount);
+
+        emit Withdrawn(amount);
     }
 
-    //emits the event base on whether token is minted or burned.
-    function _afterTokenTransfer(address operator, address from, address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
-        internal 
-        override 
-        virtual 
-    {
-        if(from == address(0)){
-            emit Attest(to, ids[0]);
-        }else if(to == address(0)){
-            emit Revoke(to, ids[0]);
-        }
+    //verifies signature against input and recovers address, or reverts transaction if signature is invalid
+    function _verify(NFTVoucher calldata voucher) public view returns (address) {
+        bytes32 digest = _hash(voucher);
+        return ECDSA.recover(digest, voucher.signature);
+    }
 
+    //returns the hash of the argument passed
+    function _hash(NFTVoucher calldata voucher) internal view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(
+            keccak256("NFTVoucher(uint256 tokenId,uint256 minPrice,address buyer)"),
+            voucher.tokenId,
+            voucher.minPrice,
+            voucher.buyer
+        )));
+    }
+
+    //override required by solidity
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC1155, AccessControl) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 }
