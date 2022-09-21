@@ -8,7 +8,6 @@ import "@openzeppelin/contracts@4.7.3/utils/cryptography/draft-EIP712.sol";
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts@4.7.3/access/AccessControl.sol";
 
-//["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB"]
 contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, AccessControl {
     event Redeemed(address buyer, uint256 tokenId);
     event Airdropped(address account, uint256 tokenId);
