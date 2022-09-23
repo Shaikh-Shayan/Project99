@@ -6,10 +6,9 @@ import "@openzeppelin/contracts@4.7.3/access/Ownable.sol";
 import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155Burnable.sol";
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/draft-EIP712.sol";
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts@4.7.3/access/AccessControl.sol";
 
-contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, AccessControl {
-    event Redeemed(address buyer, uint256 tokenId);
+contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
+    event NFTPurchased(uint256 tokenId, uint256 nonce, address buyer, uint256 amount);
     event Airdropped(address account, uint256 tokenId);
     event MemberPassClaimed(address account, uint256 tokenId);
     event NotAirdropped(address account);
@@ -18,16 +17,17 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, AccessControl {
 
     string private constant SIGNING_DOMAIN = "Voucher-Domain";
     string private constant SIGNING_VERSION = "1";
-    mapping(uint256 => uint256) MAX_SUPPLY;
+    mapping(uint256 => uint256) COPIES;
     mapping(uint256 => uint256) minted;
     uint256 creationTime;
     uint256 burnTime;
 
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    address immutable MINTER_ROLE;
 
     //NFT Voucher contains all the information that will go in the actual NFT
     struct NFTVoucher {
         uint256 tokenId;
+        uint256 nonce;
         uint256 minPrice;
         address buyer;
         //The signature proves that the NFT creator authorized the creation of the specific NFT described in the voucher.
@@ -35,19 +35,18 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, AccessControl {
     }
 
     //Signature Tracker
-    mapping(uint256 => mapping(bytes => bool)) public signatureUsed;
+    mapping(uint256 => bool) public voucherUsed;
     
     mapping(address => bool) public claimed;
     mapping(address => bool) public airdropped;
     
-    constructor(address signer, uint256 longhorn_maxsupply, uint256 memberpass_maxsupply) ERC1155("LongHorn_MemberPass") EIP712(SIGNING_DOMAIN, SIGNING_VERSION) {
-        _setupRole(MINTER_ROLE, signer);
-        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    constructor(address signer, uint256 longhorn_copies, uint256 memberpass_copies) ERC1155("LongHorn_MemberPass") EIP712(SIGNING_DOMAIN, SIGNING_VERSION) {
+        MINTER_ROLE = signer;
         creationTime = block.timestamp;
         //365(days)*24(hours)*60(minutes)*60(seconds) = 31536000 seconds
         burnTime = creationTime + 31536000;
-        MAX_SUPPLY[1] = longhorn_maxsupply;
-        MAX_SUPPLY[2] = memberpass_maxsupply;
+        COPIES[1] = longhorn_copies;
+        COPIES[2] = memberpass_copies;
     }
 
     //sets the base URI
@@ -63,21 +62,22 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, AccessControl {
         
         //Check if the signature is valid and belongs to the account that's authorized to mint NFTs
         address signer = _verify(voucher);
-        require(hasRole(MINTER_ROLE, signer), "Invalid signer");
+        require(signer == MINTER_ROLE, "Invalid signer");
 
         //Check to see if user has already used the signature
-        require(!signatureUsed[voucher.tokenId][voucher.signature], "Signature has already been used.");
+        require(!voucherUsed[voucher.nonce], "This voucher has already been used.");
 
         require(voucher.tokenId == 1 || voucher.tokenId == 2, "Token doesn't exist");
-        require(minted[voucher.tokenId]<MAX_SUPPLY[voucher.tokenId], "Not enough supply");
-        require(msg.value >= voucher.minPrice , "Not enough ethers sent");
+        require(minted[voucher.tokenId]<COPIES[voucher.tokenId], "Not enough supply");
+        require(msg.value >= voucher.minPrice* 1 wei, "Not enough ethers sent");
 
         _mint(voucher.buyer, voucher.tokenId, 1, "");
-    
-        minted[voucher.tokenId] += 1;
-        signatureUsed[voucher.tokenId][voucher.signature] = true;
+        payable(owner()).transfer(msg.value);
 
-        emit Redeemed(voucher.buyer, voucher.tokenId);
+        minted[voucher.tokenId] += 1;
+        voucherUsed[voucher.nonce] = true;
+
+        emit NFTPurchased(voucher.tokenId, voucher.nonce, voucher.buyer, msg.value);
     }
 
 
@@ -87,7 +87,7 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, AccessControl {
         onlyOwner 
     {   
         //check if number of airdropped Member Pass Nft exceeds Maximum Supply
-        require(minted[2]+accounts.length<= MAX_SUPPLY[2], "Not enough supply");
+        require(minted[2]+accounts.length<= COPIES[2], "Not enough supply");
 
         for(uint i = 0; i < accounts.length; i++) {
             //Skip the address if it doesn't own any Long Horn NFT or if it has been airdropped nft already
@@ -103,7 +103,9 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, AccessControl {
 
 
     //mints the nft to the address(msg.sender) who was aidropped the nft 
-    function claim(address account) external {
+    function claim(address account) 
+        external 
+    {
         require(airdropped[account] == true, "You don't have any NFT!");
         require(claimed[account] == false, "NFT Already Claimed!");
 
@@ -131,6 +133,16 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, AccessControl {
         super.burn(account, id, value);
     }
 
+    //updates the number of copies
+    function updateCopies(uint256 tokenId, uint256 newCopies) 
+        public 
+        onlyOwner
+    {
+        require(tokenId == 1|| tokenId == 2, "TokenId doesn't exists");
+        require(newCopies>0, "Copies cannot be zero");
+
+        COPIES[tokenId] = newCopies;
+    }
 
     //let's the owner withdraw the funds from the contract
     function withdraw() public onlyOwner{
@@ -151,15 +163,12 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, AccessControl {
     //returns the hash of the argument passed
     function _hash(NFTVoucher calldata voucher) internal view returns (bytes32) {
         return _hashTypedDataV4(keccak256(abi.encode(
-            keccak256("NFTVoucher(uint256 tokenId,uint256 minPrice,address buyer)"),
+            keccak256("NFTVoucher(uint256 tokenId,uint256 nonce,uint256 minPrice,address buyer)"),
             voucher.tokenId,
+            voucher.nonce,
             voucher.minPrice,
             voucher.buyer
         )));
     }
 
-    //override required by solidity
-    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC1155, AccessControl) returns (bool) {
-        return super.supportsInterface(interfaceId);
-    }
 }
