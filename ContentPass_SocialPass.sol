@@ -15,8 +15,7 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable{
     event RemovedFromAllowlist(address account, uint256 tokenId);
     event AddedToAllowlist(address account, uint256 tokenId);
     
-
-    mapping(uint256 => uint256) MAX_SUPPLY;
+    mapping(uint256 => uint256) COPIES;
     mapping(uint256 => uint256) minted;
     uint256 creationTime;
     uint256 burnTime;
@@ -25,12 +24,12 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable{
     mapping(uint256=>mapping(address => bool)) public allowlist;
     mapping(uint256=>mapping(address => bool)) public airdropped;
 
-    constructor(uint256 socialPassMaxSupply, uint256 contentPassMaxSupply,address[] memory _whitelistForSocialPass, address[] memory _whitelistForContentPass) ERC1155("CommunityBuilderPass"){
+    constructor(uint256 contentPassCopies, uint256 socialPassCopies,address[] memory _whitelistForSocialPass, address[] memory _whitelistForContentPass) ERC1155("CommunityBuilderPass"){
         creationTime = block.timestamp;
         //365(days)*24(hours)*60(minutes)*60(seconds) = 31536000 seconds
         burnTime = creationTime + 31536000;
-        MAX_SUPPLY[1] = socialPassMaxSupply;
-        MAX_SUPPLY[2] = contentPassMaxSupply;
+        COPIES[1] = contentPassCopies;
+        COPIES[2] = socialPassCopies;
 
         for(uint i=0; i< _whitelistForSocialPass.length; i++){
             allowlist[1][_whitelistForSocialPass[i]] = true;
@@ -49,7 +48,7 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable{
         require(tokenId == 1 || tokenId == 2, "TokenId doesn't exists!");
 
         //check if number of airdropped nft exceeds Maximum Supply
-        require(minted[tokenId]+accounts.length <= MAX_SUPPLY[tokenId], "Not enough supply");
+        require(minted[tokenId]+accounts.length <= COPIES[tokenId], "Not enough supply");
 
         for(uint i = 0; i < accounts.length; i++) {
             //Skip the address if it's not present in the allowlist or if it has been airdropped nft already
@@ -101,6 +100,17 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable{
         emit Claimed(account, tokenId);
     }
 
+    //update the number of copies
+    function updateCopies(uint256 tokenId, uint256 newCopies) 
+        public 
+        onlyOwner
+    {
+        require(tokenId == 1|| tokenId == 2, "TokenId doesn't exists");
+        require(newCopies>0, "Copies cannot be zero");
+
+        COPIES[tokenId] = newCopies;
+    }
+
     //sets the base URI
     function setURI(string memory newuri) public onlyOwner {
         _setURI(newuri);
@@ -122,12 +132,7 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable{
         require(block.timestamp > burnTime, "You are not allowed to burn the nft before 1 year");
         super.burn(account, id, value);
     }
-
-    function withdraw() public onlyOwner{
-        require(address(this).balance >0, "Balance is 0");
-        payable(owner()).transfer(address(this).balance);
-    }
-
+    
     //ensures that NFT is non-transferable 
     function _beforeTokenTransfer(address operator, address from, address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
         internal 
