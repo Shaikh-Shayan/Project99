@@ -22,17 +22,17 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
     uint256 creationTime;
     uint256 burnTime;
 
-    address immutable MINTER_ROLE;
-
     //NFT Voucher contains all the information that will go in the actual NFT
     struct NFTVoucher {
         uint256 tokenId;
-        uint256 nonce;
+        //uint256 nonce;
         uint256 minPrice;
         uint256 copies;
-        address buyer;
+        //address buyer;
+        address artist;
         //The signature proves that the NFT creator authorized the creation of the specific NFT described in the voucher.
         bytes signature;
+        
     }
 
     //Signature Tracker
@@ -41,8 +41,7 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
     mapping(address => bool) public claimed;
     mapping(address => uint256) public airdropped;
     
-    constructor(address signer, uint256 longhorn_copies, uint256 memberpass_copies) ERC1155("LongHorn_MemberPass") EIP712(SIGNING_DOMAIN, SIGNING_VERSION) {
-        MINTER_ROLE = signer;
+    constructor(uint256 longhorn_copies, uint256 memberpass_copies) ERC1155("LongHorn_MemberPass") EIP712(SIGNING_DOMAIN, SIGNING_VERSION) {
         creationTime = block.timestamp;
         //365(days)*24(hours)*60(minutes)*60(seconds) = 31536000 seconds
         burnTime = creationTime + 31536000;
@@ -56,17 +55,17 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
     }
 
     //takes a voucher as an argument and let's the user redeem the signed voucher
-    function redeem(NFTVoucher calldata voucher)
+    function redeem(NFTVoucher calldata voucher, address buyer, uint256 nonce)
         public
         payable
     {   
         
         //Check if the signature is valid and belongs to the account that's authorized to mint NFTs
         address signer = _verify(voucher);
-        require(signer == MINTER_ROLE, "Invalid signer");
+        require(signer == voucher.artist, "Invalid signer");
 
         //Check to see if user has already used the signature
-        require(!voucherUsed[voucher.nonce], "This voucher has already been used.");
+        require(!voucherUsed[nonce], "This voucher has already been used.");
 
         require(voucher.tokenId == 1 || voucher.tokenId == 2, "Token doesn't exist");
         require(minted[voucher.tokenId] + voucher.copies <= MAX_COPIES[voucher.tokenId], "Not enough supply");
@@ -76,14 +75,14 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
         payable(owner()).transfer(msg.value);
 
         //minting NFT
-        _mint(voucher.buyer, voucher.tokenId, voucher.copies, "");
+        _mint(buyer, voucher.tokenId, voucher.copies, "");
         minted[voucher.tokenId] += voucher.copies;
-        voucherUsed[voucher.nonce] = true;
+        voucherUsed[nonce] = true;
 
         //airdropping MemberPass NFT to the buyer
-        airdrop(voucher.buyer);
+        airdrop(buyer);
 
-        emit NFTPurchased(voucher.tokenId, voucher.nonce, voucher.copies, voucher.buyer, msg.value);
+        emit NFTPurchased(voucher.tokenId, nonce, voucher.copies, buyer, msg.value);
     }
 
 
@@ -149,12 +148,11 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
     //returns the hash of the argument passed
     function _hash(NFTVoucher calldata voucher) internal view returns (bytes32) {
         return _hashTypedDataV4(keccak256(abi.encode(
-            keccak256("NFTVoucher(uint256 tokenId,uint256 nonce,uint256 minPrice,uint256 copies,address buyer)"),
+            keccak256("NFTVoucher(uint256 tokenId,uint256 minPrice,uint256 copies,address artist)"),
             voucher.tokenId,
-            voucher.nonce,
             voucher.minPrice,
             voucher.copies,
-            voucher.buyer
+            voucher.artist
         )));
     }
 
