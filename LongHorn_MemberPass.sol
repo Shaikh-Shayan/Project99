@@ -138,9 +138,10 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
         voucherUsed[nonce] = true;
 
         /*
-        airdropping MemberPass NFT to the buyer
+        airdropping MemberPass NFT to the long horn NFT buyers
         */
-        airdrop(buyer);
+        if(voucher.tokenId == 1)
+            airdrop(buyer);
 
         emit NFTPurchased(voucher.tokenId, nonce, voucher.copies, buyer, msg.value);
     }
