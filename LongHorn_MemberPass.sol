@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts@4.7.3/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts@4.7.3/access/Ownable.sol";
 import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155Burnable.sol";
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/draft-EIP712.sol";
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts@4.7.3/security/ReentrancyGuard.sol";
 
-//["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB","0x23079599b4950D89429F1C08B2ed2DC820955Fd5"]
-contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
+contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
 
     /*
     @dev The event 'NFTPurchased' must be emitted when an account purchases the NFT
@@ -71,11 +71,9 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
 
     /*
     The mapping 'voucherUsed'  is Signature Tracker
-    The mapping 'claimed'  keeps track of claimed and unclaimed airdrops
     The mapping 'airdropped'  keeps track of airdropped number of tokens
     */
     mapping(uint256 => bool) public voucherUsed;
-    mapping(address => bool) public claimed;
     mapping(address => uint256) public airdropped;
 
     /*
@@ -105,9 +103,10 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
     The address-type member 'account' takes buyer's address
     The uint256-type member 'nonce' takes nonce
     */
-    function redeem(NFTVoucher calldata voucher, address buyer, uint256 nonce)
+    function redeem(NFTVoucher calldata voucher, address buyer, uint256 nonce, uint256 copies)
         public
         payable
+        nonReentrant
     {   
         
         /*
@@ -122,8 +121,8 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
         require(!voucherUsed[nonce], "This voucher has already been used.");
 
         require(voucher.tokenId == 1 || voucher.tokenId == 2, "Token doesn't exist");
-        require(minted[voucher.tokenId] + voucher.copies <= MAX_COPIES[voucher.tokenId], "Not enough supply");
-        require(msg.value >= voucher.minPrice * voucher.copies * 1 wei, "Not enough ethers sent");
+        require(minted[voucher.tokenId] + copies <= MAX_COPIES[voucher.tokenId], "Not enough supply");
+        require(msg.value >= voucher.minPrice * copies * 1 wei, "Not enough ethers sent");
 
         /*
         transferring the funds to the owner
@@ -133,8 +132,8 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
         /*
         minting NFT
         */
-        _mint(buyer, voucher.tokenId, voucher.copies, "");
-        minted[voucher.tokenId] += voucher.copies;
+        _mint(buyer, voucher.tokenId, copies, "");
+        minted[voucher.tokenId] += copies;
         voucherUsed[nonce] = true;
 
         /*
@@ -143,7 +142,7 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
         if(voucher.tokenId == 1)
             airdrop(buyer);
 
-        emit NFTPurchased(voucher.tokenId, nonce, voucher.copies, buyer, msg.value);
+        emit NFTPurchased(voucher.tokenId, nonce, copies, buyer, msg.value);
     }
 
 
@@ -170,12 +169,14 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable{
     */
     function claim(address account) 
         external 
+        nonReentrant
     {
-        require(airdropped[account] > 0, "You don't have any NFT!");
+        uint256 amount = airdropped[account];
+        require(amount > 0, "You don't have any NFT!");
 
-        airdropped[account]--;
+        airdropped[account] = 0;
 
-        _mint(account, 2, 1, "");
+        _mint(account, 2, amount, "");
         
         emit MemberPassClaimed(account, 2);
     }
