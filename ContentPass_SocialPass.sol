@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts@4.7.3/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts@4.7.3/access/Ownable.sol";
 import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155Burnable.sol";
+import "@openzeppelin/contracts@4.7.3/security/ReentrancyGuard.sol";
 
-//["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB","0x23079599b4950D89429F1C08B2ed2DC820955Fd5"]
-
-contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable{
+contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable, ReentrancyGuard{
 
     /*
     @dev The event 'Airdropped' must be emitted when an account is airdropped tokens
@@ -193,6 +192,7 @@ contract CommunityBuilderPass is ERC1155, Ownable, ERC1155Burnable{
     */
     function claim(address account, uint256 tokenId) 
         external 
+        nonReentrant
     {
         uint256 amount = airdropped[tokenId][account];
 
