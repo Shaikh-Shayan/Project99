@@ -91,25 +91,14 @@ contract CommunityBuilderPass is
     The address[]-type input '_whitelistForContentPass' takes whitelisted addresses for Content Pass
     The address[]-type input '_whitelistForSocialPass' takes whitelisted addresses for Social Pass
     */
-    constructor(
-        uint256 contentPassCopies,
-        uint256 socialPassCopies,
-        address[] memory _whitelistForContentPass,
-        address[] memory _whitelistForSocialPass
-    ) ERC1155("CommunityBuilderPass") {
+    constructor(uint256 contentPassCopies, uint256 socialPassCopies)
+        ERC1155("CommunityBuilderPass")
+    {
         creationTime = block.timestamp;
         //365(days)*24(hours)*60(minutes)*60(seconds) = 31536000 seconds
         burnTime = creationTime + 31536000;
         MAX_COPIES[1] = contentPassCopies;
         MAX_COPIES[2] = socialPassCopies;
-
-        for (uint256 i = 0; i < _whitelistForContentPass.length; i++) {
-            allowlist[1][_whitelistForContentPass[i]] = true;
-        }
-
-        for (uint256 i = 0; i < _whitelistForSocialPass.length; i++) {
-            allowlist[2][_whitelistForSocialPass[i]] = true;
-        }
     }
 
     /*
