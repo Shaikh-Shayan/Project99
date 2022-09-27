@@ -179,13 +179,13 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
     }
 
     /*
-    The function 'noOfPassesAirdropped' returns the number of Member Pass NFTs airdropped to an account
+    The function 'noOfAirdroppedNFT' returns the number of Member Pass NFTs airdropped to an account
     The address-type member 'account' takes user's address
     Returns uint256-type value which is the number of Member Pass NFTs possessed by the specified account
     Returns uint256-type value which is the number of NFTs of given tokenId claimed by the specified account
     */
 
-    function hasAirdroppedNFT(address account)
+    function noOfAirdroppedNFT(address account)
         public
         view
         returns (uint256, uint256)
