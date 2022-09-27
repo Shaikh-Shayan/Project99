@@ -6,6 +6,8 @@ import "@openzeppelin/contracts@4.7.3/access/Ownable.sol";
 import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155Burnable.sol";
 import "@openzeppelin/contracts@4.7.3/security/ReentrancyGuard.sol";
 
+//["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB","0x23079599b4950D89429F1C08B2ed2DC820955Fd5"]
+//[["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2",5],["0xdD870fA1b7C4700F2BD7f44238821C26f7392148",10],["0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db",10]]
 contract CommunityBuilderPass is
     ERC1155,
     Ownable,
@@ -67,9 +69,11 @@ contract CommunityBuilderPass is
     /*
     The mapping 'allowlist' stores allowlist/whitelist addresses
     The mapping 'airdropped' stores number of tokens airdropped to an address
+    The mapping 'claimed' stores number of NFT claimed by an address
     */
     mapping(uint256 => mapping(address => bool)) public allowlist;
     mapping(uint256 => mapping(address => uint256)) public airdropped;
+    mapping(uint256 => mapping(address => uint256)) public claimed;
     /*
     The struct 'NFTAirdrop' is a struct for airdrops
     The address-type member 'receiver' stores receiver's address
@@ -172,18 +176,27 @@ contract CommunityBuilderPass is
     }
 
     /*
-    The function 'noOfPassesAirdropped' returns the number of NFTs airdropped to an account
+    The function 'noOfAirdroppedNFT' returns the number of NFTs airdropped to an account
     The uint256-type input 'tokenId' takes Token ID
     The address-type member 'account' takes user's address
-    Returns uint256-type value which is the number of NFTs of given tokenId possessed by the specified account
+    Returns bool-type value which represents whether or not the address is present in the allowlist
+    Returns uint256-type value which is the number of NFTs of given tokenId airdropped to the specified account
+    Returns uint256-type value which is the number of NFTs of given tokenId claimed by the specified account
     */
-
-    function noOfPassesAirdropped(uint256 tokenId, address account)
+    function noOfAirdroppedNFT(uint256 tokenId, address account)
         public
         view
-        returns (uint256)
+        returns (
+            bool,
+            uint256,
+            uint256
+        )
     {
-        return airdropped[tokenId][account];
+        return (
+            allowlist[tokenId][account],
+            airdropped[tokenId][account],
+            claimed[tokenId][account]
+        );
     }
 
     /*
@@ -223,12 +236,13 @@ contract CommunityBuilderPass is
     The uint256-type input 'tokenId' takes Token ID
     */
     function claim(address account, uint256 tokenId) external nonReentrant {
-        uint256 amount = airdropped[tokenId][account];
+        uint256 amount = airdropped[tokenId][account] -
+            claimed[tokenId][account];
 
         require(tokenId == 1 || tokenId == 2, "TokenId doesn't exists!");
         require(amount > 0, "You don't have any NFT!");
 
-        airdropped[tokenId][account] = 0;
+        claimed[tokenId][account] += amount;
 
         _mint(account, tokenId, amount, "");
         minted[tokenId] += amount;
