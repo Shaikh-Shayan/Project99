@@ -8,8 +8,7 @@ import "@openzeppelin/contracts@4.7.3/utils/cryptography/draft-EIP712.sol";
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts@4.7.3/security/ReentrancyGuard.sol";
 
-contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
-
+contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
     /*
     @dev The event 'NFTPurchased' must be emitted when an account purchases the NFT
     The uint256-type member 'tokenId' takes Token ID
@@ -18,7 +17,13 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
     The address-type member 'account' takes buyer's address
     The uint256-type member 'amount' takes token amount
     */
-    event NFTPurchased(uint256 tokenId, uint256 nonce, uint256 copies, address buyer, uint256 amount);
+    event NFTPurchased(
+        uint256 tokenId,
+        uint256 nonce,
+        uint256 copies,
+        address buyer,
+        uint256 amount
+    );
     /*
     @dev The event 'Airdropped' must be emitted when an account is airdropped tokens
     The address-type member 'account' takes receiver's address
@@ -37,6 +42,7 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
     The uint256-type member 'tokenId' takes Token ID
     */
     event NFTBurned(address account, uint256 tokenId);
+
 
     string private constant SIGNING_DOMAIN = "Voucher-Domain";
     string private constant SIGNING_VERSION = "1";
@@ -66,7 +72,6 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
         of the specific NFT described in the voucher.
         */
         bytes signature;
-        
     }
 
     /*
@@ -81,7 +86,10 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
     The uint256-type input 'longhorn_copies' takes number of copies for Longhorn
     The uint256-type input 'memberpass_copies' takes number of copies for Member Pass
     */
-    constructor(uint256 longhorn_copies, uint256 memberpass_copies) ERC1155("LongHorn_MemberPass") EIP712(SIGNING_DOMAIN, SIGNING_VERSION) {
+    constructor(uint256 longhorn_copies, uint256 memberpass_copies)
+        ERC1155("LongHorn_MemberPass")
+        EIP712(SIGNING_DOMAIN, SIGNING_VERSION)
+    {
         creationTime = block.timestamp;
         //365(days)*24(hours)*60(minutes)*60(seconds) = 31536000 seconds
         burnTime = creationTime + 31536000;
@@ -93,7 +101,7 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
     The function 'setURI' sets the base URI
     The string-type input 'newuri' takes the URI
     */
-    function setURI(string memory newuri) public onlyOwner{
+    function setURI(string memory newuri) public onlyOwner {
         _setURI(newuri);
     }
 
@@ -103,12 +111,12 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
     The address-type member 'account' takes buyer's address
     The uint256-type member 'nonce' takes nonce
     */
-    function redeem(NFTVoucher calldata voucher, address buyer, uint256 nonce, uint256 copies)
-        public
-        payable
-        nonReentrant
-    {   
-        
+    function redeem(
+        NFTVoucher calldata voucher,
+        address buyer,
+        uint256 nonce,
+        uint256 copies
+    ) public payable nonReentrant {
         /*
         Check if the signature is valid and belongs to the account that's authorized to mint NFTs
         */
@@ -120,9 +128,18 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
         */
         require(!voucherUsed[nonce], "This voucher has already been used.");
 
-        require(voucher.tokenId == 1 || voucher.tokenId == 2, "Token doesn't exist");
-        require(minted[voucher.tokenId] + copies <= MAX_COPIES[voucher.tokenId], "Not enough supply");
-        require(msg.value >= voucher.minPrice * copies * 1 wei, "Not enough ethers sent");
+        require(
+            voucher.tokenId == 1 || voucher.tokenId == 2,
+            "Token doesn't exist"
+        );
+        require(
+            minted[voucher.tokenId] + copies <= MAX_COPIES[voucher.tokenId],
+            "Not enough supply"
+        );
+        require(
+            msg.value >= voucher.minPrice * copies * 1 wei,
+            "Not enough ethers sent"
+        );
 
         /*
         transferring the funds to the owner
@@ -139,45 +156,51 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
         /*
         airdropping MemberPass NFT to the long horn NFT buyers
         */
-        if(voucher.tokenId == 1)
-            airdrop(buyer);
+        if (voucher.tokenId == 1) airdrop(buyer);
 
         emit NFTPurchased(voucher.tokenId, nonce, copies, buyer, msg.value);
     }
-
 
     /*
     The function 'airdrop' airdrops nfts to the account passed as param to the function
     The address-type member 'account' takes receiver's address
     */
-    function airdrop(address account) 
-        internal
-    {   
+    function airdrop(address account) internal {
         /*
         check if number of airdropped Member Pass Nft exceeds Maximum Supply
         */
-        require(minted[2]+1<= MAX_COPIES[2], "Not enough supply");
+        require(minted[2] + 1 <= MAX_COPIES[2], "Not enough supply");
 
         airdropped[account]++;
         emit Airdropped(account, 1);
     }
 
+    /*
+    The function 'noOfPassesAirdropped' returns the number of Member Pass NFTs airdropped to an account
+    The address-type member 'account' takes user's address
+    Returns uint256-type value which is the number of Member Pass NFTs possessed by the specified account
+    */
+
+    function noOfPassesAirdropped(address account)
+        public
+        view
+        returns (uint256)
+    {
+        return airdropped[account];
+    }
 
     /*
     The function 'claim' mints the nft to the address(msg.sender) who was aidropped the nft 
     The address-type input 'account' takes receiver's address
     */
-    function claim(address account) 
-        external 
-        nonReentrant
-    {
+    function claim(address account) external nonReentrant {
         uint256 amount = airdropped[account];
         require(amount > 0, "You don't have any NFT!");
 
         airdropped[account] = 0;
 
         _mint(account, 2, amount, "");
-        
+
         emit MemberPassClaimed(account, 2);
     }
 
@@ -199,7 +222,10 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
         /*
         Require statement checks that the time has exceeded burn rate, i.e., 1 year
         */
-        require(block.timestamp > burnTime, "You are not allowed to burn the nft before 1 year");
+        require(
+            block.timestamp > burnTime,
+            "You are not allowed to burn the nft before 1 year"
+        );
 
         emit NFTBurned(account, id);
         super.burn(account, id, value);
@@ -210,12 +236,9 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
     The uint256-type input 'tokenId' takes Token ID
     The uint256-type input 'newCopies' takes new nmuber of copies
     */
-    function updateCopies(uint256 tokenId, uint256 newCopies) 
-        public 
-        onlyOwner
-    {
-        require(tokenId == 1|| tokenId == 2, "TokenId doesn't exists");
-        require(newCopies>0, "Copies cannot be zero");
+    function updateCopies(uint256 tokenId, uint256 newCopies) public onlyOwner {
+        require(tokenId == 1 || tokenId == 2, "TokenId doesn't exists");
+        require(newCopies > 0, "Copies cannot be zero");
 
         MAX_COPIES[tokenId] = newCopies;
     }
@@ -225,7 +248,11 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
     or reverts transaction if signature is invalid
     The NFTVoucher-type input 'voucher' takes voucher
     */
-    function _verify(NFTVoucher calldata voucher) public view returns (address) {
+    function _verify(NFTVoucher calldata voucher)
+        public
+        view
+        returns (address)
+    {
         bytes32 digest = _hash(voucher);
         return ECDSA.recover(digest, voucher.signature);
     }
@@ -234,14 +261,24 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard{
     The function '_hash' returns the hash of the argument passed
     The NFTVoucher-type input 'voucher' takes voucher
     */
-    function _hash(NFTVoucher calldata voucher) internal view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(
-            keccak256("NFTVoucher(uint256 tokenId,uint256 minPrice,uint256 copies,address artist)"),
-            voucher.tokenId,
-            voucher.minPrice,
-            voucher.copies,
-            voucher.artist
-        )));
+    function _hash(NFTVoucher calldata voucher)
+        internal
+        view
+        returns (bytes32)
+    {
+        return
+            _hashTypedDataV4(
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "NFTVoucher(uint256 tokenId,uint256 minPrice,uint256 copies,address artist)"
+                        ),
+                        voucher.tokenId,
+                        voucher.minPrice,
+                        voucher.copies,
+                        voucher.artist
+                    )
+                )
+            );
     }
-
 }
