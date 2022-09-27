@@ -8,6 +8,7 @@ import "@openzeppelin/contracts@4.7.3/utils/cryptography/draft-EIP712.sol";
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts@4.7.3/security/ReentrancyGuard.sol";
 
+//["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB","0x23079599b4950D89429F1C08B2ed2DC820955Fd5"]
 contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
     /*
     @dev The event 'NFTPurchased' must be emitted when an account purchases the NFT
@@ -34,15 +35,15 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
     @dev The event 'MemberPassClaimed' must be emitted when a pass is claimed
     The address-type member 'account' takes receiver's address
     The uint256-type member 'tokenId' takes Token ID
+    The uint256-type member 'amount' takes token amount
     */
-    event MemberPassClaimed(address account, uint256 tokenId);
+    event MemberPassClaimed(address account, uint256 tokenId, uint256 amount);
     /*
     @dev The event 'NFTBurned' must be emitted when an NFT is burned from an address
     The address-type member 'account' takes receiver's address
     The uint256-type member 'tokenId' takes Token ID
     */
     event NFTBurned(address account, uint256 tokenId);
-
 
     string private constant SIGNING_DOMAIN = "Voucher-Domain";
     string private constant SIGNING_VERSION = "1";
@@ -76,10 +77,12 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
 
     /*
     The mapping 'voucherUsed'  is Signature Tracker
-    The mapping 'airdropped'  keeps track of airdropped number of tokens
+    The mapping 'airdropped'  keeps track of number of MemberPass NFTs airdropped to an account
+    The mapping 'claimed' keeps track of number of MemberPass NFTs claimed by an account
     */
     mapping(uint256 => bool) public voucherUsed;
     mapping(address => uint256) public airdropped;
+    mapping(address => uint256) public claimed;
 
     /*
     The contract constructor takes 4 arguments while deploying
@@ -179,14 +182,15 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
     The function 'noOfPassesAirdropped' returns the number of Member Pass NFTs airdropped to an account
     The address-type member 'account' takes user's address
     Returns uint256-type value which is the number of Member Pass NFTs possessed by the specified account
+    Returns uint256-type value which is the number of NFTs of given tokenId claimed by the specified account
     */
 
-    function noOfPassesAirdropped(address account)
+    function hasAirdroppedNFT(address account)
         public
         view
-        returns (uint256)
+        returns (uint256, uint256)
     {
-        return airdropped[account];
+        return (airdropped[account], claimed[account]);
     }
 
     /*
@@ -194,14 +198,14 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
     The address-type input 'account' takes receiver's address
     */
     function claim(address account) external nonReentrant {
-        uint256 amount = airdropped[account];
+        uint256 amount = airdropped[account] - claimed[account];
         require(amount > 0, "You don't have any NFT!");
 
-        airdropped[account] = 0;
+        claimed[account] += amount;
 
         _mint(account, 2, amount, "");
 
-        emit MemberPassClaimed(account, 2);
+        emit MemberPassClaimed(account, 2, amount);
     }
 
     /*
