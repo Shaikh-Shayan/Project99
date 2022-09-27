@@ -8,7 +8,6 @@ import "@openzeppelin/contracts@4.7.3/utils/cryptography/draft-EIP712.sol";
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts@4.7.3/security/ReentrancyGuard.sol";
 
-//["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB","0x23079599b4950D89429F1C08B2ed2DC820955Fd5"]
 contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
     /*
     @dev The event 'NFTPurchased' must be emitted when an account purchases the NFT
@@ -44,6 +43,18 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
     The uint256-type member 'tokenId' takes Token ID
     */
     event NFTBurned(address account, uint256 tokenId);
+    /*
+    @dev The event 'RemovedFromAllowlist' must be emitted when an address is removed from allowlist
+    The address-type member 'account' takes receiver's address
+    The uint256-type member 'tokenId' takes Token ID
+    */
+    event RemovedFromAllowlist(address account, uint256 tokenId);
+    /*
+    @dev The event 'AddedToAllowlist' must be emitted when an address is added to allowlist
+    The address-type member 'account' takes receiver's address
+    The uint256-type member 'tokenId' takes Token ID
+    */
+    event AddedToAllowlist(address account, uint256 tokenId);
 
     string private constant SIGNING_DOMAIN = "Voucher-Domain";
     string private constant SIGNING_VERSION = "1";
@@ -52,7 +63,7 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
     The mapping 'minted' stores minted number of copies
     */
     mapping(uint256 => uint256) MAX_COPIES;
-    mapping(uint256 => uint256) minted;
+    mapping(uint256 => uint256) public minted;
     uint256 creationTime;
     uint256 burnTime;
 
@@ -81,6 +92,7 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
     The mapping 'claimed' keeps track of number of MemberPass NFTs claimed by an account
     */
     mapping(uint256 => bool) public voucherUsed;
+    mapping(uint256 => mapping(address => bool)) public allowlist;
     mapping(address => uint256) public airdropped;
     mapping(address => uint256) public claimed;
 
@@ -120,6 +132,13 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
         uint256 nonce,
         uint256 copies
     ) public payable nonReentrant {
+        /*
+        Check wether address is present in the allowlist
+        */
+        require(
+            allowlist[voucher.tokenId][buyer],
+            "Address not present in the allowlist"
+        );
         /*
         Check if the signature is valid and belongs to the account that's authorized to mint NFTs
         */
@@ -191,6 +210,37 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
         returns (uint256, uint256)
     {
         return (airdropped[account], claimed[account]);
+    }
+
+    /*
+    The function 'addToAllowlist' adds the list of addresses to the Allowlist
+    The address[]-type input '_recipients' takes addresses to add to the Allowlist
+    The uint256-type input 'tokenId' takes Token ID
+    */
+    function addToAllowlist(address[] memory _recipients, uint256 tokenId)
+        external
+        onlyOwner
+    {
+        require(tokenId == 1 || tokenId == 2, "TokenId doesn't exists!");
+        for (uint256 i = 0; i < _recipients.length; i++) {
+            allowlist[tokenId][_recipients[i]] = true;
+            emit AddedToAllowlist(_recipients[i], tokenId);
+        }
+    }
+
+    /*
+    The function 'removeFromAllowlist' removes the list of addresses from the Allowlist
+    The address[]-type input '_recipients' takes addresses to remove from the Allowlist
+    The uint256-type input 'tokenId' takes Token ID
+    */
+    function removeFromAllowlist(address[] memory _recipients, uint256 tokenId)
+        external
+        onlyOwner
+    {
+        for (uint256 i = 0; i < _recipients.length; i++) {
+            allowlist[tokenId][_recipients[i]] = false;
+            emit RemovedFromAllowlist(_recipients[i], tokenId);
+        }
     }
 
     /*
