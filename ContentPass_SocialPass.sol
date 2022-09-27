@@ -63,7 +63,7 @@ contract CommunityBuilderPass is
     The mapping 'minted' stores minted number of copies
     */
     mapping(uint256 => uint256) MAX_COPIES;
-    mapping(uint256 => uint256) minted;
+    mapping(uint256 => uint256) public minted;
     uint256 creationTime;
     uint256 burnTime;
     /*
