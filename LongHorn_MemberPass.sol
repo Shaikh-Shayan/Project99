@@ -7,7 +7,9 @@ import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155Burnable.s
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/draft-EIP712.sol";
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts@4.7.3/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155URIStorage.sol";
 
+//["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB","0x23079599b4950D89429F1C08B2ed2DC820955Fd5"]
 contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
     /*
     @dev The event 'NFTPurchased' must be emitted when an account purchases the NFT
@@ -88,13 +90,16 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
 
     /*
     The mapping 'voucherUsed'  is Signature Tracker
+    TThe mapping 'allowlist' stores allowlist/whitelist addresses for NFTs
     The mapping 'airdropped'  keeps track of number of MemberPass NFTs airdropped to an account
     The mapping 'claimed' keeps track of number of MemberPass NFTs claimed by an account
+    The mapping '_uris' stores the uri of all the NFTs
     */
     mapping(uint256 => bool) public voucherUsed;
     mapping(uint256 => mapping(address => bool)) public allowlist;
     mapping(address => uint256) public airdropped;
     mapping(address => uint256) public claimed;
+    mapping(uint256 => string) private _uris;
 
     /*
     The contract constructor takes 4 arguments while deploying
@@ -102,7 +107,9 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
     The uint256-type input 'memberpass_copies' takes number of copies for Member Pass
     */
     constructor(uint256 longhorn_copies, uint256 memberpass_copies)
-        ERC1155("LongHorn_MemberPass")
+        ERC1155(
+            "ipfs://bafybeidcf6zgua6jmzxpmhq6uey3izacstycsneeleyvhjnozmm5djyxcq/{id}.json"
+        )
         EIP712(SIGNING_DOMAIN, SIGNING_VERSION)
     {
         creationTime = block.timestamp;
@@ -110,14 +117,42 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
         burnTime = creationTime + 31536000;
         MAX_COPIES[1] = longhorn_copies;
         MAX_COPIES[2] = memberpass_copies;
+
+        //set the token uri for LongHorn and MemberPass
+        setTokenURI(
+            1,
+            "ipfs://bafybeidcf6zgua6jmzxpmhq6uey3izacstycsneeleyvhjnozmm5djyxcq/1.json"
+        );
+        setTokenURI(
+            2,
+            "ipfs://bafybeidcf6zgua6jmzxpmhq6uey3izacstycsneeleyvhjnozmm5djyxcq/2.json"
+        );
     }
 
     /*
-    The function 'setURI' sets the base URI
-    The string-type input 'newuri' takes the URI
+    function 'uri' returns the uri linked with a tokenId.
+    The uint256-type member 'tokenId' takes token Id
+    Returns string-type member which is the uri string associated with the tokenId
     */
-    function setURI(string memory newuri) public onlyOwner {
-        _setURI(newuri);
+    function uri(uint256 tokenId)
+        public
+        view
+        virtual
+        override
+        returns (string memory)
+    {
+        return _uris[tokenId];
+    }
+
+    /*
+    function 'setTokenURI' links the uri with a tokenId.
+    The uint256-type member 'tokenId' takes token Id
+    The string-type member '_uri' takes string uri
+    */
+
+    function setTokenURI(uint256 tokenId, string memory _uri) public onlyOwner {
+        require(bytes(_uris[tokenId]).length == 0, "Cannot set uri twice");
+        _uris[tokenId] = _uri;
     }
 
     /*
