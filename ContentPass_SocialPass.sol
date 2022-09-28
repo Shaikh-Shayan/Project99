@@ -6,8 +6,6 @@ import "@openzeppelin/contracts@4.7.3/access/Ownable.sol";
 import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155Burnable.sol";
 import "@openzeppelin/contracts@4.7.3/security/ReentrancyGuard.sol";
 
-//["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB","0x23079599b4950D89429F1C08B2ed2DC820955Fd5"]
-//[["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2",5],["0xdD870fA1b7C4700F2BD7f44238821C26f7392148",10],["0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db",10]]
 contract CommunityBuilderPass is
     ERC1155,
     Ownable,
@@ -70,10 +68,12 @@ contract CommunityBuilderPass is
     The mapping 'allowlist' stores allowlist/whitelist addresses
     The mapping 'airdropped' stores number of tokens airdropped to an address
     The mapping 'claimed' stores number of NFT claimed by an address
+    The mapping '_uris' stores the uri of all the NFTs
     */
     mapping(uint256 => mapping(address => bool)) public allowlist;
     mapping(uint256 => mapping(address => uint256)) public airdropped;
     mapping(uint256 => mapping(address => uint256)) public claimed;
+    mapping(uint256 => string) private _uris;
     /*
     The struct 'NFTAirdrop' is a struct for airdrops
     The address-type member 'receiver' stores receiver's address
@@ -99,6 +99,42 @@ contract CommunityBuilderPass is
         burnTime = creationTime + 31536000;
         MAX_COPIES[1] = contentPassCopies;
         MAX_COPIES[2] = socialPassCopies;
+
+        //set the token uri for LongHorn and MemberPass
+        setTokenURI(
+            1,
+            "ipfs://bafybeidcf6zgua6jmzxpmhq6uey3izacstycsneeleyvhjnozmm5djyxcq/1.json"
+        );
+        setTokenURI(
+            2,
+            "ipfs://bafybeidcf6zgua6jmzxpmhq6uey3izacstycsneeleyvhjnozmm5djyxcq/2.json"
+        );
+    }
+
+    /*
+    function 'uri' returns the uri linked with a tokenId.
+    The uint256-type member 'tokenId' takes token Id
+    Returns string-type member which is the uri string associated with the tokenId
+    */
+    function uri(uint256 tokenId)
+        public
+        view
+        virtual
+        override
+        returns (string memory)
+    {
+        return _uris[tokenId];
+    }
+
+    /*
+    function 'setTokenURI' links the uri with a tokenId.
+    The uint256-type member 'tokenId' takes token Id
+    The string-type member '_uri' takes string uri
+    */
+
+    function setTokenURI(uint256 tokenId, string memory _uri) public onlyOwner {
+        require(bytes(_uris[tokenId]).length == 0, "Cannot set uri twice");
+        _uris[tokenId] = _uri;
     }
 
     /*
