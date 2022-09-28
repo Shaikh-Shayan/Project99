@@ -7,9 +7,7 @@ import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155Burnable.s
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/draft-EIP712.sol";
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts@4.7.3/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155URIStorage.sol";
 
-//["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB","0x23079599b4950D89429F1C08B2ed2DC820955Fd5"]
 contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
     /*
     @dev The event 'NFTPurchased' must be emitted when an account purchases the NFT
