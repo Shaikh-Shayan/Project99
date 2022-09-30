@@ -7,11 +7,16 @@ import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155Burnable.s
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/draft-EIP712.sol";
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts@4.7.3/security/ReentrancyGuard.sol";
-import "./NFT.sol";
+import "./NFTStorage.sol";
 
 //["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB","0x23079599b4950D89429F1C08B2ed2DC820955Fd5"]
-contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
-   
+contract NFTMarketPlace is
+    ERC1155,
+    ERC1155Burnable,
+    EIP712,
+    Ownable,
+    ReentrancyGuard
+{
     event NFTPurchased(
         uint256 tokenId,
         uint256 nonce,
@@ -19,28 +24,16 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
         address buyer,
         uint256 amount
     );
-    
+
     event Airdropped(address account, uint256 amount, uint256 tokenId);
-   
-    //event NotAirdropped(address account, uint256 tokenId);
-    
+
     event Claimed(address account, uint256 amount, uint256 tokenId);
-    
+
     event NFTBurned(address account, uint256 tokenId);
-    
-    event RemovedFromAllowlist(address account, uint256 tokenId);
-    
-    event AddedToAllowlist(address account, uint256 tokenId);
 
     string private constant SIGNING_DOMAIN = "Voucher-Domain";
     string private constant SIGNING_VERSION = "1";
-    
-    // mapping(uint256 => uint256) MAX_COPIES;
-    // mapping(uint256 => uint256) public minted;
-    // uint256 creationTime;
-    // uint256 burnTime;
 
-    
     struct NFTVoucher {
         uint256 tokenId;
         uint256 minPrice;
@@ -52,28 +45,26 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
         bytes signature;
     }
 
-    // struct NFTAirdrop{
-    //     address receiver;
-    //     uint256 amount;
-    // }
+    //Contract Address of NFTStorage
+    NFTStorage public NFTStorageContract;
 
-    
-    NFTDetail nftDetail;
+    //Checks whether NFT with given tokenId exists
+    modifier isValidId(uint256 tokenId) {
+        require(
+            NFTStorageContract.getNFTDetails(tokenId).isSet,
+            "NFT DOESNT' EXISTS"
+        );
+        _;
+    }
 
-    constructor(address _nftDetail)
+    constructor(address _NFTStorageAddress)
         ERC1155(
             "ipfs://bafybeidcf6zgua6jmzxpmhq6uey3izacstycsneeleyvhjnozmm5djyxcq/{id}.json"
         )
         EIP712(SIGNING_DOMAIN, SIGNING_VERSION)
     {
-        nftDetail = NFTDetail(_nftDetail);
+        NFTStorageContract = NFTStorage(_NFTStorageAddress);
     }
-
-    modifier isValidId(uint256 tokenId){
-        require(nftDetail.getNFTDetails(tokenId).isSet);
-        _;
-    }
-    
 
     /*
     function 'redeem' takes a voucher as an argument and lets the user redeem the signed voucher
@@ -85,39 +76,38 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
         NFTVoucher calldata voucher,
         uint256 nonce,
         uint256 copies
-    ) public payable nonReentrant isValidId(voucher.tokenId){
+    ) public payable nonReentrant isValidId(voucher.tokenId) {
         /*
         Check wether address is present in the allowlist
         */
-        NFTDetail.nft memory nftPass = nftDetail.getNFTDetails(voucher.tokenId);
+        NFTStorage.NFTDetails memory NFT = NFTStorageContract.getNFTDetails(
+            voucher.tokenId
+        );
 
         address buyer = msg.sender;
         require(
-            nftDetail.getAllowlisted(voucher.tokenId,buyer),
-            "Address not present in the allowlist"
+            NFTStorageContract.getAllowlisted(voucher.tokenId, buyer),
+            "ADDRESS NOT ALLOWLISTED"
         );
         /*
         Check if the signature is valid and belongs to the account that's authorized to mint NFTs
         */
         address signer = _verify(voucher);
-        require(signer == voucher.artist, "Invalid signer");
+        require(signer == voucher.artist, "INVALID SIGNER");
 
         /*
         Check to see if user has already used the signature
         */
-        require(!nftDetail.voucherUsed(nonce), "This voucher has already been used.");
+        require(!NFTStorageContract.voucherUsed(nonce), "VOUCHER ALREADY USED");
 
         // require(
         //     voucher.tokenId == 1 || voucher.tokenId == 2,
         //     "Token doesn't exist"
         // );
+        require(NFT.minted + copies <= NFT.maxCopies, "NOT ENOUGH NFT SUPPLY");
         require(
-            nftPass.minted + copies <= nftPass.maxCopies,
-            "Not enough supply"
-        );
-        require(
-            msg.value >= nftPass.price * copies * 1 wei,
-            "Not enough ethers sent"
+            msg.value >= NFT.price * copies * 1 wei,
+            "NOT ENOUGH ETHERS SENT"
         );
 
         /*
@@ -129,59 +119,75 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
         minting NFT
         */
         _mint(buyer, voucher.tokenId, copies, "");
-        nftPass.minted += copies;
-        nftDetail.setVoucherUsed(nonce);
+        NFT.minted += copies;
+        NFTStorageContract.setVoucherUsed(nonce);
 
         /*
-        airdropping MemberPass NFT to the long horn NFT buyers
+        airdropping Rewards NFTs to the NFT buyers
         */
-        if(nftPass.rewardNFT.length != 0){
-            for(uint256 j = 0; j < nftPass.rewardNFT.length; j++){
-                nftDetail.setAirdroppedAmount(nftPass.rewardNFT[j], buyer, 1);
+        if (NFT.rewardNFTs.length != 0) {
+            for (uint256 j = 0; j < NFT.rewardNFTs.length; j++) {
+                NFTStorageContract.setAirdroppedAmount(
+                    NFT.rewardNFTs[j],
+                    buyer,
+                    1
+                );
             }
-        } 
+        }
         emit NFTPurchased(voucher.tokenId, nonce, copies, buyer, msg.value);
     }
 
-   
+    /*
+    function 'checkElgibility' checks whether an account can claim the NFT with given tokenId
+    The uint256-type member 'tokenId' takes the NFT token id
+    The address-type member 'account' takes user's address
+    Returns bool-type member indicating if the account can claim the NFT
+    */
     function checkEligibility(uint256 tokenId, address account)
         public
         view
         isValidId(tokenId)
-        returns (string memory, bool)
+        returns (bool)
     {
-        if(nftDetail.getAllowlisted(tokenId, account)){
-            if(nftDetail.getClaimedAmount(tokenId, account) == 0){
-                return ("You can claim your NFT", true);
-            }else{
-                return ("You have already claimed this NFT", false);
-            }
-        }else{
-            return ("Your address is not present in the allowlist", false);
-        }
+        //check whether account is allowlisted to claim the NFT or not
+        require(
+            NFTStorageContract.getAllowlisted(tokenId, account),
+            "ACCOUNT NOT ALLOWLISTED"
+        );
+        //check wthere account has already claimed the NFT or not
+        require(
+            NFTStorageContract.getClaimedAmount(tokenId, account) == 0,
+            "NFT ALREADY CLAIMED"
+        );
+
+        return true;
     }
 
-    
     /*
     The function 'claim' mints the nft to the address(msg.sender) who was aidropped the nft 
     The address-type input 'account' takes receiver's address
     The uint256-type input 'tokenId' takes Token ID
     */
-    function claim(uint256 tokenId) external nonReentrant isValidId(tokenId){
+    function claim(uint256 tokenId) external nonReentrant isValidId(tokenId) {
         address account = msg.sender;
-        NFTDetail.nft memory nftPass = nftDetail.getNFTDetails(tokenId);
+        NFTStorage.NFTDetails memory NFT = NFTStorageContract.getNFTDetails(
+            tokenId
+        );
 
-        uint256 amount = nftDetail.getAirdroppedAmount(tokenId,account) -
-            nftDetail.getClaimedAmount(tokenId,account);
+        //calculate the number of NFTs the user has left to claim
+        uint256 amount = NFTStorageContract.getAirdroppedAmount(
+            tokenId,
+            account
+        ) - NFTStorageContract.getClaimedAmount(tokenId, account);
 
-        require(amount > 0, "You don't have any NFT!");
+        require(amount > 0, "NO NFT LEFT TO CLAIM");
 
-        
-
+        //mint the number of above calculated NFTs to the aacount
         _mint(account, tokenId, amount, "");
-        nftPass.minted += amount;
-        nftDetail.setClaimedAmount(tokenId, account, amount);
-        
+        NFT.minted += amount;
+
+        NFTStorageContract.setClaimedAmount(tokenId, account, amount);
+
         emit Claimed(account, amount, tokenId);
     }
 
@@ -195,8 +201,8 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
         address account,
         uint256 id,
         uint256 value
-    ) public override isValidId(id){
-        NFTDetail.nft memory nftPass = nftDetail.getNFTDetails(id);
+    ) public override isValidId(id) {
+        NFTStorage.NFTDetails memory NFT = NFTStorageContract.getNFTDetails(id);
         require(
             account == _msgSender() || isApprovedForAll(account, _msgSender()),
             "ERC1155: caller is not token owner or approved"
@@ -205,15 +211,15 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
         Require statement checks that the time has exceeded burn rate, i.e., 1 year
         */
         require(
-            block.timestamp > nftPass.burnTime,
-            "You are not allowed to burn the nft before 1 year"
+            block.timestamp > NFT.burnTime,
+            "NFT CANNOT BE BURNED BEFORE 1 YEAR"
         );
 
         emit NFTBurned(account, id);
         super.burn(account, id, value);
     }
 
-     /*
+    /*
     The function '_beforeTokenTransfer' ensures that NFT is non-transferable 
     */
     function _beforeTokenTransfer(
@@ -223,20 +229,19 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
         uint256[] memory ids,
         uint256[] memory amounts,
         bytes memory data
-    ) internal virtual override{
-
-        NFTDetail.nft memory nftPass = nftDetail.getNFTDetails(ids[0]);
-        require(nftPass.isSet,"TokenId doesn't exists");
-        if(nftPass.isTransferrable){
+    ) internal virtual override {
+        NFTStorage.NFTDetails memory NFT = NFTStorageContract.getNFTDetails(
+            ids[0]
+        );
+        require(NFT.isSet, "NFT DOESNT' EXISTS");
+        if (NFT.isTransferrable) {
             super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
-        }
-        else{
+        } else {
             require(
                 from == address(0) || to == address(0),
-                "You can't transfer this NFT"
+                "THIS NFT IS NON-TRANSFERRABLE"
             );
         }
-        
     }
 
     /*
@@ -250,15 +255,15 @@ contract NFT is ERC1155, ERC1155Burnable, EIP712, Ownable, ReentrancyGuard {
         uint256[] memory amounts,
         bytes memory data
     ) internal virtual override {
-        NFTDetail.nft memory nftPass = nftDetail.getNFTDetails(ids[0]);
-        require(nftPass.isSet,"TokenId doesn't exists");
+        NFTStorage.NFTDetails memory NFT = NFTStorageContract.getNFTDetails(
+            ids[0]
+        );
+        require(NFT.isSet, "NFT DOESNT' EXISTS");
 
-        if(nftPass.isTransferrable){
+        if (NFT.isTransferrable) {
             super._afterTokenTransfer(operator, from, to, ids, amounts, data);
         }
     }
-
-    
 
     /*
     The function '_verify' verifies signature against input and recovers address, 
