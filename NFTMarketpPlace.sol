@@ -1,22 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.7;
 
-import "@openzeppelin/contracts@4.7.3/token/ERC1155/ERC1155.sol";
+//import "@openzeppelin/contracts@4.7.3/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts@4.7.3/access/Ownable.sol";
-import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155Burnable.sol";
+//import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155Burnable.sol";
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/draft-EIP712.sol";
 import "@openzeppelin/contracts@4.7.3/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts@4.7.3/security/ReentrancyGuard.sol";
-import "./NFTStorage.sol";
+import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155URIStorage.sol";
+import "./NFTStorage_V2.sol";
 
 //["0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB","0x23079599b4950D89429F1C08B2ed2DC820955Fd5"]
-contract NFTMarketPlace is
-    ERC1155,
-    ERC1155Burnable,
-    EIP712,
-    Ownable,
-    ReentrancyGuard
-{
+contract NFTMarketPlace is ERC1155URIStorage, EIP712, Ownable, ReentrancyGuard {
     event NFTPurchased(
         uint256 tokenId,
         uint256 nonce,
@@ -98,12 +93,11 @@ contract NFTMarketPlace is
         /*
         Check to see if user has already used the signature
         */
-        require(!NFTStorageContract.voucherUsed(nonce), "VOUCHER ALREADY USED");
+        require(
+            !NFTStorageContract.voucherUsed(NFT.tokenId, nonce),
+            "VOUCHER ALREADY USED"
+        );
 
-        // require(
-        //     voucher.tokenId == 1 || voucher.tokenId == 2,
-        //     "Token doesn't exist"
-        // );
         require(NFT.minted + copies <= NFT.maxCopies, "NOT ENOUGH NFT SUPPLY");
         require(
             msg.value >= NFT.price * copies * 1 wei,
@@ -111,23 +105,29 @@ contract NFTMarketPlace is
         );
 
         /*
-        transferring the funds to the owner
+        setting the tokenURI for the NFT when it's minted for the first time
         */
-        payable(owner()).transfer(msg.value);
+        if (NFT.minted == 0) _setURI(NFT.tokenId, NFT.uri);
 
         /*
         minting NFT
         */
         _mint(buyer, voucher.tokenId, copies, "");
+
+        /*
+        transferring the funds to the owner
+        */
+        payable(owner()).transfer(msg.value);
+
         NFT.minted += copies;
-        NFTStorageContract.setVoucherUsed(nonce);
+        NFTStorageContract.setVoucherUsed(NFT.tokenId, nonce);
 
         /*
         airdropping Rewards NFTs to the NFT buyers
         */
         if (NFT.rewardNFTs.length != 0) {
             for (uint256 j = 0; j < NFT.rewardNFTs.length; j++) {
-                NFTStorageContract.setAirdroppedAmount(
+                NFTStorageContract.setNumOfNFTAirdropped(
                     NFT.rewardNFTs[j],
                     buyer,
                     1
@@ -142,25 +142,26 @@ contract NFTMarketPlace is
     The uint256-type member 'tokenId' takes the NFT token id
     The address-type member 'account' takes user's address
     Returns bool-type member indicating if the account can claim the NFT
+    Returns string-type member indicating the error message
     */
     function checkEligibility(uint256 tokenId, address account)
         public
         view
         isValidId(tokenId)
-        returns (bool)
+        returns (bool, string memory)
     {
         //check whether account is allowlisted to claim the NFT or not
-        require(
-            NFTStorageContract.getAllowlisted(tokenId, account),
-            "ACCOUNT NOT ALLOWLISTED"
-        );
         //check wthere account has already claimed the NFT or not
-        require(
-            NFTStorageContract.getClaimedAmount(tokenId, account) == 0,
-            "NFT ALREADY CLAIMED"
-        );
 
-        return true;
+        if (!NFTStorageContract.getAllowlisted(tokenId, account)) {
+            return (false, "ACCOUNT NOT ALLOWLISTED");
+        } else if (
+            NFTStorageContract.getNumOfNFTClaimed(tokenId, account) == 0
+        ) {
+            return (false, "NFT ALREADY CLAIMED");
+        } else {
+            return (true, "ACCOUNT ELIGIBLE");
+        }
     }
 
     /*
@@ -175,18 +176,23 @@ contract NFTMarketPlace is
         );
 
         //calculate the number of NFTs the user has left to claim
-        uint256 amount = NFTStorageContract.getAirdroppedAmount(
+        uint256 amount = NFTStorageContract.getNumOfNFTAirdropped(
             tokenId,
             account
-        ) - NFTStorageContract.getClaimedAmount(tokenId, account);
+        ) - NFTStorageContract.getNumOfNFTClaimed(tokenId, account);
 
         require(amount > 0, "NO NFT LEFT TO CLAIM");
 
-        //mint the number of above calculated NFTs to the aacount
+        /*
+        setting the tokenURI for the NFT when it's minted for the first time
+        */
+        if (NFT.minted == 0) _setURI(NFT.tokenId, NFT.uri);
+
+        //mints the number of above calculated NFTs to the aacount
         _mint(account, tokenId, amount, "");
         NFT.minted += amount;
 
-        NFTStorageContract.setClaimedAmount(tokenId, account, amount);
+        NFTStorageContract.setNumOfNFTClaimed(tokenId, account, amount);
 
         emit Claimed(account, amount, tokenId);
     }
@@ -201,7 +207,7 @@ contract NFTMarketPlace is
         address account,
         uint256 id,
         uint256 value
-    ) public override isValidId(id) {
+    ) public isValidId(id) {
         NFTStorage.NFTDetails memory NFT = NFTStorageContract.getNFTDetails(id);
         require(
             account == _msgSender() || isApprovedForAll(account, _msgSender()),
@@ -216,7 +222,7 @@ contract NFTMarketPlace is
         );
 
         emit NFTBurned(account, id);
-        super.burn(account, id, value);
+        super._burn(account, id, value);
     }
 
     /*
