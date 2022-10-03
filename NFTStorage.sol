@@ -2,12 +2,13 @@
 pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts@4.7.3/access/Ownable.sol";
-import "@openzeppelin/contracts@4.7.3/token/ERC1155/extensions/ERC1155URIStorage.sol";
 
-contract NFTStorage is Ownable, ERC1155URIStorage {
+contract NFTStorage is Ownable {
     event RemovedFromAllowlist(address account, uint256 tokenId);
 
     event AddedToAllowlist(address account, uint256 tokenId);
+
+    event Airdropped(address account, uint256 tokenId);
 
     //struct containing all the details regarding an NFT
     struct NFTDetails {
@@ -17,8 +18,7 @@ contract NFTStorage is Ownable, ERC1155URIStorage {
         address creator;
         uint256 maxCopies;
         uint256 minted;
-        uint256 noOfNFTAirdropped;
-        uint256 creationTime;
+        uint256 numOfNFTAirdropped;
         uint256 burnTime;
         bool isTransferrable;
         uint256[] rewardNFTs;
@@ -27,7 +27,7 @@ contract NFTStorage is Ownable, ERC1155URIStorage {
     }
 
     //Tracks the voucher that have already been used
-    mapping(uint256 => bool) public voucherUsed;
+    mapping(uint256 => mapping(uint256 => bool)) public voucherUsed;
     //Stores the allowlist for all NFTs
     mapping(uint256 => mapping(address => bool)) public allowlist;
     //Tracks the number of NFTs airdropped to an address for each tokenId
@@ -55,11 +55,7 @@ contract NFTStorage is Ownable, ERC1155URIStorage {
         _;
     }
 
-    constructor()
-        ERC1155(
-            "ipfs://bafybeidcf6zgua6jmzxpmhq6uey3izacstycsneeleyvhjnozmm5djyxcq/{id}.json"
-        )
-    {}
+    constructor() {}
 
     /*
     function 'setNFTDetails' sets the details for the given NFT
@@ -82,21 +78,28 @@ contract NFTStorage is Ownable, ERC1155URIStorage {
     ) public onlyOwner {
         NFTDetails storage NFT = NftAtId[_tokenId];
         require(!NFT.isSet, "NFT DETAILS CANNOT BE CHANGED");
+        require(_maxCopies != 0, "MAX COPIES CANNOT BE ZERO");
+
+        //check if reward nft id's exist
+        for (uint256 i = 0; i < _rewardNFTs.length; i++) {
+            require(
+                NftAtId[_rewardNFTs[i]].isSet,
+                "REWARD NFT ID DOESN'T EXISTS"
+            );
+        }
+
         NFT.name = _name;
         NFT.tokenId = _tokenId;
         NFT.price = _price;
         NFT.creator = msg.sender;
         NFT.maxCopies = _maxCopies;
         NFT.minted = 0;
-        NFT.noOfNFTAirdropped = 0;
-        NFT.creationTime = block.timestamp;
+        NFT.numOfNFTAirdropped = 0;
         NFT.burnTime = block.timestamp + 31536000;
         NFT.isTransferrable = _isTransferrable;
         NFT.rewardNFTs = _rewardNFTs;
         NFT.uri = _uri;
         NFT.isSet = true;
-
-        _setURI(_tokenId, _uri);
     }
 
     /*
@@ -127,12 +130,12 @@ contract NFTStorage is Ownable, ERC1155URIStorage {
     }
 
     /*
-    function 'getAirdropppedAmount' returns the number of NFTs airdropped to the address
+    function 'getNumOfNFTAirdroppped' returns the number of NFTs airdropped to the address
     The uint256-type member 'tokenId' takes the token id of the NFT
     The address-type member 'account' takes the address of the user
     Returns uint256-type member indicating the number of NFTs airdropped to the given address for given tokenId
     */
-    function getAirdroppedAmount(uint256 tokenId, address account)
+    function getNumOfNFTAirdropped(uint256 tokenId, address account)
         public
         view
         returns (uint256)
@@ -141,26 +144,28 @@ contract NFTStorage is Ownable, ERC1155URIStorage {
     }
 
     /*
-    function 'setAirdropppedAmount' updates the number of NFTs airdropped to the address
+    function 'setNumOfNFTAirdropped' updates the number of NFTs airdropped to the address
     The uint256-type member 'tokenId' takes the token id of the NFT
     The address-type member 'account' takes the address of the user
     The uint256-type member 'amount' takes the number of NFTs airdropped
     */
-    function setAirdroppedAmount(
+    function setNumOfNFTAirdropped(
         uint256 tokenId,
         address account,
         uint256 amount
     ) public onlyContractAddreess(msg.sender) {
+        NFTDetails memory NFT = NftAtId[tokenId];
+        NFT.numOfNFTAirdropped += amount;
         airdroppedToAddress[tokenId][account] += amount;
     }
 
     /*
-    function 'getClaimedAmount' returns the number of NFTs claimed by the address
+    function 'getNumOfNFTClaimed' returns the number of NFTs claimed by the address
     The uint256-type member 'tokenId' takes the token id of the NFT
     The address-type member 'account' takes the address of the user
     Returns uint256-type member indicating the number of NFTs claimed by the given address for given tokenId
     */
-    function getClaimedAmount(uint256 tokenId, address account)
+    function getNumOfNFTClaimed(uint256 tokenId, address account)
         public
         view
         returns (uint256)
@@ -169,12 +174,12 @@ contract NFTStorage is Ownable, ERC1155URIStorage {
     }
 
     /*
-    function 'setClaimedAmount' updates the number of NFTs claimed by the address
+    function 'setNumOfNFTClaimed' updates the number of NFTs claimed by the address
     The uint256-type member 'tokenId' takes the token id of the NFT
     The address-type member 'account' takes the address of the user
     The uint256-type member 'amount' takes the number of NFTs claimed
     */
-    function setClaimedAmount(
+    function setNumOfNFTClaimed(
         uint256 tokenId,
         address account,
         uint256 amount
@@ -187,19 +192,23 @@ contract NFTStorage is Ownable, ERC1155URIStorage {
     The uint256-type member 'nonce' takes the nonce
     Returns bool-type member true/false indicating if the nonce has already been used or not
     */
-    function getVoucherUsed(uint256 nonce) public view returns (bool) {
-        return voucherUsed[nonce];
+    function getVoucherUsed(uint256 tokenId, uint256 nonce)
+        public
+        view
+        returns (bool)
+    {
+        return voucherUsed[tokenId][nonce];
     }
 
     /*
     function 'setVoucherUsed' sets the voucherUsed to true for the givne nonce
     The uint256-type member 'nonce' takes the nonce
     */
-    function setVoucherUsed(uint256 nonce)
+    function setVoucherUsed(uint256 tokenId, uint256 nonce)
         public
         onlyContractAddreess(msg.sender)
     {
-        voucherUsed[nonce] = true;
+        voucherUsed[tokenId][nonce] = true;
     }
 
     /*
@@ -211,25 +220,53 @@ contract NFTStorage is Ownable, ERC1155URIStorage {
     }
 
     /*
+    The function 'airdropToMultipleAccount' can only be called by owner, 
+    and airdrops nfts to all the accounts passed as paramater to the function
+    The uint256-type member 'tokenId' takes Token ID
+    The address[]-type input '_recipients' takes array of addresses
+    */
+    function airdropToMultipleAccount(
+        uint256 tokenId,
+        address[] memory _recipients
+    ) external onlyOwner isValidId(tokenId) {
+        NFTDetails storage NFT = NftAtId[tokenId];
+
+        require(_recipients.length != 0, "NO ADDRESS SENT");
+        uint256 totalNFTAirdrops = _recipients.length;
+        /*
+            The require statement checks if number of airdropped nft exceeds Maximum Supply
+        */
+        require(
+            NFT.numOfNFTAirdropped + totalNFTAirdrops <= NFT.maxCopies,
+            "NOT ENOUGH SUPPLY"
+        );
+
+        for (uint256 i = 0; i < _recipients.length; i++) {
+            address recipient = _recipients[i];
+            //Airdropping 1 NFT to receiver
+            airdroppedToAddress[tokenId][recipient]++;
+            emit Airdropped(recipient, tokenId);
+        }
+
+        NFT.numOfNFTAirdropped += totalNFTAirdrops;
+
+        //Adding addresses to allowlist
+        addToAllowlist(tokenId, _recipients);
+    }
+
+    /*
     The function 'addToAllowlist' adds the list of addresses to the Allowlist
     The address[]-type input '_recipients' takes addresses to add to the Allowlist
     The uint256-type input 'tokenId' takes Token ID
     */
-    function addToAllowlist(address[] memory _recipients, uint256 tokenId)
-        external
+    function addToAllowlist(uint256 tokenId, address[] memory _recipients)
+        public
         onlyOwner
         isValidId(tokenId)
     {
-        NFTDetails storage NFT = NftAtId[tokenId];
-        uint256 totalAirdrop = NFT.noOfNFTAirdropped + _recipients.length;
-        require(totalAirdrop <= NFT.maxCopies, "NOT ENOUGH NFT SUPPLY");
-        //uint256 airdropId = tokenId;
-
+        require(_recipients.length != 0, "NO ADDRESS SENT");
         for (uint256 i = 0; i < _recipients.length; i++) {
             allowlist[tokenId][_recipients[i]] = true;
-            if (NFT.price == 0) {
-                airdroppedToAddress[tokenId][_recipients[i]]++;
-            }
             emit AddedToAllowlist(_recipients[i], tokenId);
         }
     }
